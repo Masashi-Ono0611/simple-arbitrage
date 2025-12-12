@@ -19,6 +19,11 @@ const MIN_PROFIT_WEI = BigNumber.from(process.env.MIN_PROFIT_WEI || ETHER.div(10
 
 const DEBUG_ARBITRAGE = process.env.DEBUG_ARBITRAGE === "1"
 const DEBUG_TOP_N = parseInt(process.env.DEBUG_ARBITRAGE_TOP_N || "5", 10)
+const DEBUG_ARBITRAGE_VERBOSE = process.env.DEBUG_ARBITRAGE_VERBOSE === "1"
+
+const DEBUG_LOCAL_SIMULATION = process.env.DEBUG_LOCAL_SIMULATION === "1"
+const DEBUG_LOCAL_EXECUTION = process.env.DEBUG_LOCAL_EXECUTION === "1"
+const DEBUG_EXECUTE_EVERY_N_BLOCKS = parseInt(process.env.DEBUG_EXECUTE_EVERY_N_BLOCKS || "1", 10)
 
 // TODO: implement binary search (assuming linear/exponential global maximum profitability)
 const TEST_VOLUMES = [
@@ -115,6 +120,22 @@ export class Arbitrage {
         }
       });
 
+      if (DEBUG_ARBITRAGE && DEBUG_ARBITRAGE_VERBOSE) {
+        console.log(
+          "Token Debug:" +
+          " token=" + tokenAddress +
+          " markets=" + pricedMarkets.length
+        )
+        for (const pm of pricedMarkets) {
+          console.log(
+            "Market:" +
+            " addr=" + pm.ethMarket.marketAddress +
+            " buyTokenPrice=" + pm.buyTokenPrice.toString() +
+            " sellTokenPrice=" + pm.sellTokenPrice.toString()
+          )
+        }
+      }
+
       const crossedMarkets = new Array<Array<EthMarket>>()
       for (const pricedMarket of pricedMarkets) {
         _.forEach(pricedMarkets, pm => {
@@ -172,6 +193,11 @@ export class Arbitrage {
 
   // TODO: take more than 1
   async takeCrossedMarkets(bestCrossedMarkets: CrossedMarketDetails[], blockNumber: number, minerRewardPercentage: number): Promise<void> {
+    if (DEBUG_LOCAL_EXECUTION && DEBUG_EXECUTE_EVERY_N_BLOCKS > 1 && (blockNumber % DEBUG_EXECUTE_EVERY_N_BLOCKS) !== 0) {
+      console.log(`DEBUG_LOCAL_EXECUTION: skipping block=${blockNumber}, executeEveryN=${DEBUG_EXECUTE_EVERY_N_BLOCKS}`)
+      return
+    }
+
     for (const bestCrossedMarket of bestCrossedMarkets) {
 
       console.log("Send this much WETH", bestCrossedMarket.volume.toString(), "get this much profit", bestCrossedMarket.profit.toString())
@@ -187,6 +213,90 @@ export class Arbitrage {
         gasPrice: BigNumber.from(0),
         gasLimit: BigNumber.from(1000000),
       });
+
+      if (DEBUG_LOCAL_EXECUTION) {
+        const provider = this.bundleExecutorContract.provider;
+        const weth = new Contract(WETH_ADDRESS, ["function balanceOf(address) view returns (uint256)"], provider);
+        const before: BigNumber = await weth.balanceOf(this.bundleExecutorContract.address);
+        console.log("BundleExecutor WETH before:", before.toString())
+
+        let gasLimit: BigNumber | undefined = undefined
+        try {
+          gasLimit = await provider.estimateGas({
+            ...transaction,
+            from: this.executorWallet.address,
+          })
+        } catch (e: any) {
+          console.error("Local execution estimateGas failed", e?.reason || e?.message || e)
+          continue
+        }
+
+        const signer = this.executorWallet.connect(provider)
+        const feeData = await provider.getFeeData()
+        const txRequest: any = {
+          ...transaction,
+          gasLimit: gasLimit.mul(2),
+        }
+        // Populate fees so anvil accepts the transaction (EIP-1559 or legacy)
+        if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+          txRequest.maxFeePerGas = feeData.maxFeePerGas
+          txRequest.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas
+          delete txRequest.gasPrice
+        } else if (feeData.gasPrice) {
+          txRequest.gasPrice = feeData.gasPrice
+          delete txRequest.maxFeePerGas
+          delete txRequest.maxPriorityFeePerGas
+        }
+
+        let sent
+        try {
+          sent = await signer.sendTransaction(txRequest)
+        } catch (e: any) {
+          console.error("Local execution sendTransaction failed", e?.reason || e?.message || e)
+          const errData = e?.error?.data || e?.data
+          if (errData) {
+            console.error("Local execution error data:", errData)
+          }
+          continue
+        }
+
+        console.log("Local execution txHash:", sent.hash)
+        const receipt = await sent.wait()
+        console.log("Local execution receipt status:", receipt.status)
+
+        const after: BigNumber = await weth.balanceOf(this.bundleExecutorContract.address);
+        console.log("BundleExecutor WETH after:", after.toString())
+        console.log("BundleExecutor WETH diff:", after.sub(before).toString())
+        return
+      }
+
+      if (DEBUG_LOCAL_SIMULATION) {
+        const provider = this.bundleExecutorContract.provider;
+        try {
+          const estimateGas = await provider.estimateGas({
+            ...transaction,
+            from: this.executorWallet.address,
+          })
+          console.log("Local estimateGas:", estimateGas.toString())
+        } catch (e: any) {
+          console.error("Local estimateGas failed", e?.reason || e?.message || e)
+        }
+
+        try {
+          const callResult = await provider.call({
+            ...transaction,
+            from: this.executorWallet.address,
+          })
+          console.log("Local call (success), returnData:", callResult)
+        } catch (e: any) {
+          const errData = e?.error?.data || e?.data
+          console.error("Local call failed", e?.reason || e?.message || e)
+          if (errData) {
+            console.error("Local call error data:", errData)
+          }
+        }
+        continue
+      }
 
       try {
         const estimateGas = await this.bundleExecutorContract.provider.estimateGas(
@@ -224,6 +334,10 @@ export class Arbitrage {
           targetBlockNumber
         ))
       await Promise.all(bundlePromises)
+      return
+    }
+    if (DEBUG_LOCAL_SIMULATION) {
+      console.warn("DEBUG_LOCAL_SIMULATION enabled: no bundle submitted to relay")
       return
     }
     throw new Error("No arbitrage submitted to relay")
