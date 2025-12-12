@@ -15,6 +15,11 @@ export interface CrossedMarketDetails {
 
 export type MarketsByToken = { [tokenAddress: string]: Array<EthMarket> }
 
+const MIN_PROFIT_WEI = BigNumber.from(process.env.MIN_PROFIT_WEI || ETHER.div(1000).toString())
+
+const DEBUG_ARBITRAGE = process.env.DEBUG_ARBITRAGE === "1"
+const DEBUG_TOP_N = parseInt(process.env.DEBUG_ARBITRAGE_TOP_N || "5", 10)
+
 // TODO: implement binary search (assuming linear/exponential global maximum profitability)
 const TEST_VOLUMES = [
   ETHER.div(100),
@@ -94,7 +99,13 @@ export class Arbitrage {
   async evaluateMarkets(marketsByToken: MarketsByToken): Promise<Array<CrossedMarketDetails>> {
     const bestCrossedMarkets = new Array<CrossedMarketDetails>()
 
+    const debugCandidates = new Array<CrossedMarketDetails>()
+    let debugTokens = 0
+    let debugTokensWithCrossed = 0
+    let debugTokensWithPositiveBestProfit = 0
+
     for (const tokenAddress in marketsByToken) {
+      debugTokens += 1
       const markets = marketsByToken[tokenAddress]
       const pricedMarkets = _.map(markets, (ethMarket: EthMarket) => {
         return {
@@ -113,11 +124,48 @@ export class Arbitrage {
         })
       }
 
+      if (crossedMarkets.length > 0) {
+        debugTokensWithCrossed += 1
+      }
+
       const bestCrossedMarket = getBestCrossedMarket(crossedMarkets, tokenAddress);
-      if (bestCrossedMarket !== undefined && bestCrossedMarket.profit.gt(ETHER.div(1000))) {
+      if (bestCrossedMarket !== undefined) {
+        debugCandidates.push(bestCrossedMarket)
+        if (bestCrossedMarket.profit.gt(0)) {
+          debugTokensWithPositiveBestProfit += 1
+        }
+      }
+      if (bestCrossedMarket !== undefined && bestCrossedMarket.profit.gt(MIN_PROFIT_WEI)) {
         bestCrossedMarkets.push(bestCrossedMarket)
       }
     }
+
+    if (DEBUG_ARBITRAGE) {
+      const sorted = debugCandidates.sort((a, b) => a.profit.lt(b.profit) ? 1 : a.profit.gt(b.profit) ? -1 : 0)
+      const top = sorted.slice(0, Math.max(0, DEBUG_TOP_N))
+
+      console.log(
+        "Arbitrage Debug:" +
+        " tokens=" + debugTokens +
+        " tokensWithCrossedCandidates=" + debugTokensWithCrossed +
+        " tokensWithPositiveBestProfit=" + debugTokensWithPositiveBestProfit +
+        " minProfitWei=" + MIN_PROFIT_WEI.toString() +
+        " topN=" + DEBUG_TOP_N
+      )
+
+      for (const c of top) {
+        console.log(
+          "Candidate:" +
+          " profitWei=" + c.profit.toString() +
+          " profitEth=" + bigNumberToDecimal(c.profit) +
+          " volumeEth=" + bigNumberToDecimal(c.volume) +
+          " token=" + c.tokenAddress +
+          " buyMarket=" + c.buyFromMarket.marketAddress +
+          " sellMarket=" + c.sellToMarket.marketAddress
+        )
+      }
+    }
+
     bestCrossedMarkets.sort((a, b) => a.profit.lt(b.profit) ? 1 : a.profit.gt(b.profit) ? -1 : 0)
     return bestCrossedMarkets
   }
