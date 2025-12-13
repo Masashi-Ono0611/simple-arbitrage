@@ -124,6 +124,27 @@ cast call $WETH "balanceOf(address)(uint256)" $BUNDLE_EXECUTOR_ADDRESS --rpc-url
 
 Do a large WETH -> USDC swap on Uniswap V2 Router.
 
+In a new terminal, re-load `.env` first so `$PRIVATE_KEY` is set:
+
+```sh
+set -a
+source .env
+set +a
+```
+
+Make sure your EOA still has enough WETH after funding the BundleExecutor.
+If you try to swap more WETH than your EOA balance, `swapExactTokensForTokens` will fail with `TransferHelper: TRANSFER_FROM_FAILED`.
+
+Before swapping, approve the Uniswap router to spend your WETH (example: approve 100 WETH):
+
+```sh
+WETH=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+ROUTER=0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+
+cast send --json --rpc-url http://127.0.0.1:8545 --private-key "$PRIVATE_KEY" \
+  $WETH "approve(address,uint256)(bool)" $ROUTER 100000000000000000000
+```
+
 Example (swap 10 WETH):
 
 ```sh
