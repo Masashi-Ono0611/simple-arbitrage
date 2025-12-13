@@ -184,10 +184,35 @@ Expected logs:
 - `Arbitrage Debug: ... tokensWithCrossedCandidates=1 ...`
 - `Candidate: profitWei=...`
 - `Local execution txHash: 0x...`
-- `Local execution receipt status: 1`
-- `BundleExecutor WETH before: ...`
-- `BundleExecutor WETH after: ...`
-- `BundleExecutor WETH diff: ...` (should be positive)
+
+## (Optional) Mainnet monitoring only (SEARCH_ONLY)
+
+If you only want to observe whether a crossed market exists on mainnet (no BundleExecutor deploy, no funding, no transactions sent), run in `SEARCH_ONLY` mode.
+
+This runs directly against a mainnet RPC (do not start Anvil).
+
+Important: arbitrage detection requires at least two markets for the same token (for example, Uniswap and Sushiswap for WETH/USDC). If you whitelist only one pair, the bot will have nothing to compare and will show `Updating markets, count: 0`.
+
+Example (monitor Uniswap + Sushiswap WETH/USDC):
+
+```sh
+set -a
+source .env
+set +a
+
+export SEARCH_ONLY=1
+export ETHEREUM_RPC_URL="$ALCHEMY_ETHEREUM_RPC_URL"
+export MONITORED_PAIR_ADDRESSES_WHITELIST=0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc,0x397FF1542f962076d0BFE58eA045FfA2d347ACa0
+
+npm run build
+npm run start
+```
+
+Expected logs:
+
+- `SEARCH_ONLY mode enabled: ...`
+- `Updating markets, count: 2`
+- `Candidate: profitWei=...` (only when a crossed market exists)
 
 ## 5) Verify the transaction and balances
 
