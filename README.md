@@ -19,6 +19,11 @@ Usage
 2. Deploy the included BundleExecutor.sol to Ethereum, from a secured account, with the address of the newly created wallet as the constructor argument
 3. Transfer WETH to the newly deployed BundleExecutor
 
+Guides:
+
+- `docs/fork-repro-guide.md` - End-to-end fork reproduction (Anvil) with local execution.
+- `docs/mainnet-search-only-guide.md` - Mainnet monitoring only (`SEARCH_ONLY=1`, no transactions).
+
 _It is important to keep both the bot wallet private key and bundleExecutor owner private key secure. The bot wallet attempts to not lose WETH inside an arbitrage, but a malicious user would be able to drain the contract._
 
 ```
