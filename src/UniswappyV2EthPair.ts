@@ -10,7 +10,7 @@ import { MarketsByToken } from "./Arbitrage";
 const BATCH_COUNT_LIMIT = parseInt(process.env.UNISWAP_BATCH_COUNT_LIMIT || "100", 10);
 const UNISWAP_BATCH_SIZE = parseInt(process.env.UNISWAP_BATCH_SIZE || "1000", 10)
 
-const WHITELIST_PAIR_ADDRESSES = (process.env.WHITELIST_PAIR_ADDRESSES || "")
+const WHITELIST_PAIR_ADDRESSES = (process.env.MONITORED_PAIR_ADDRESSES_WHITELIST || "")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean)

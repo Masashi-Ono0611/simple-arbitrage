@@ -15,15 +15,22 @@ export interface CrossedMarketDetails {
 
 export type MarketsByToken = { [tokenAddress: string]: Array<EthMarket> }
 
-const MIN_PROFIT_WEI = BigNumber.from(process.env.MIN_PROFIT_WEI || ETHER.div(1000).toString())
+const MIN_PROFIT_WEI = BigNumber.from(
+  process.env.ARBITRAGE_MIN_PROFIT_WEI_THRESHOLD ||
+  ETHER.div(1000).toString()
+)
 
-const DEBUG_ARBITRAGE = process.env.DEBUG_ARBITRAGE === "1"
-const DEBUG_TOP_N = parseInt(process.env.DEBUG_ARBITRAGE_TOP_N || "5", 10)
-const DEBUG_ARBITRAGE_VERBOSE = process.env.DEBUG_ARBITRAGE_VERBOSE === "1"
+const DEBUG_ARBITRAGE = process.env.ARBITRAGE_LOG_ENABLED === "1"
+const DEBUG_TOP_N = parseInt(process.env.ARBITRAGE_LOG_TOP_N || "5", 10)
+const DEBUG_ARBITRAGE_VERBOSE = process.env.ARBITRAGE_LOG_VERBOSE === "1"
 
-const DEBUG_LOCAL_SIMULATION = process.env.DEBUG_LOCAL_SIMULATION === "1"
-const DEBUG_LOCAL_EXECUTION = process.env.DEBUG_LOCAL_EXECUTION === "1"
-const DEBUG_EXECUTE_EVERY_N_BLOCKS = parseInt(process.env.DEBUG_EXECUTE_EVERY_N_BLOCKS || "1", 10)
+const DEBUG_LOCAL_SIMULATION = process.env.FORK_SIMULATE_LOCALLY === "1"
+const DEBUG_LOCAL_EXECUTION = process.env.FORK_EXECUTE_LOCALLY === "1"
+const DEBUG_EXECUTE_EVERY_N_BLOCKS = parseInt(
+  process.env.FORK_EXECUTE_EVERY_N_BLOCKS ||
+  "1",
+  10
+)
 
 // TODO: implement binary search (assuming linear/exponential global maximum profitability)
 const TEST_VOLUMES = [
