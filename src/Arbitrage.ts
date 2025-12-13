@@ -347,6 +347,10 @@ export class Arbitrage {
       console.warn("DEBUG_LOCAL_SIMULATION enabled: no bundle submitted to relay")
       return
     }
+    if (DEBUG_LOCAL_EXECUTION) {
+      console.warn("DEBUG_LOCAL_EXECUTION enabled: no local execution succeeded")
+      return
+    }
     throw new Error("No arbitrage submitted to relay")
   }
 }

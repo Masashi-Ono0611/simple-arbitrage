@@ -9,9 +9,49 @@ This guide describes a minimal, repeatable way to reproduce the successful flow 
 
 ## Prerequisites
 
-- Anvil running a mainnet fork on `http://127.0.0.1:8545` (chainId `31337`)
-- A funded local EOA (Anvil account(0) is fine)
-- BundleExecutor deployed on the fork
+- Foundry tools installed (`anvil`, `cast`, `forge`)
+- Node.js + npm (to run the bot)
+- An Alchemy mainnet RPC URL (used only by Anvil as the fork source)
+
+## 0) Start Anvil (mainnet fork)
+
+In one terminal:
+
+```sh
+set -a
+source .env
+set +a
+
+anvil --fork-url "$ALCHEMY_ETHEREUM_RPC_URL" --port 8545 --chain-id 31337 --block-time 12
+```
+
+Notes:
+
+- If you restart Anvil, the fork state resets. You must deploy BundleExecutor again and re-fund it.
+
+## 0.1) Deploy BundleExecutor to the fork
+
+In another terminal (same repo folder):
+
+```sh
+set -a
+source .env
+set +a
+
+# Use your EOA address as the executor. (Using Anvil account(0) for this deployment of BundleExecutor)
+EXECUTOR_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+forge create --broadcast \
+  --rpc-url "$ETHEREUM_RPC_URL" \
+  --private-key "$PRIVATE_KEY" \
+  contracts/BundleExecutor.sol:FlashBotsMultiCall \
+  --constructor-args "$EXECUTOR_ADDRESS"
+```
+
+After deployment:
+
+- Copy the `Deployed to:` address into `.env` as `BUNDLE_EXECUTOR_ADDRESS=...`.
+- Always re-run `set -a; source .env; set +a` in any terminal where you will use `$BUNDLE_EXECUTOR_ADDRESS`.
 
 ## 1) Configure `.env`
 
@@ -52,8 +92,17 @@ Quick meaning:
 
 The BundleExecutor needs WETH as starting capital.
 
-1) Ensure your EOA has WETH (deposit ETH -> WETH if needed).
+1) Ensure your EOA has WETH (wrap ETH -> WETH).
 2) Transfer WETH to the BundleExecutor.
+
+If your WETH balance is `0`, deposit first (example: deposit 100 ETH):
+
+```sh
+WETH=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+
+cast send --json --rpc-url http://127.0.0.1:8545 --private-key "$PRIVATE_KEY" \
+  $WETH "deposit()" --value 100ether
+```
 
 Example (transfer 50 WETH):
 
@@ -100,6 +149,10 @@ If the bot does not detect anything, increase the swap size.
 ## 4) Run the bot
 
 ```sh
+set -a
+source .env
+set +a
+
 npm run build
 npm run start
 ```
