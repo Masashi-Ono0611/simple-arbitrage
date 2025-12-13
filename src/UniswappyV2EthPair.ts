@@ -10,6 +10,11 @@ import { MarketsByToken } from "./Arbitrage";
 const BATCH_COUNT_LIMIT = parseInt(process.env.UNISWAP_BATCH_COUNT_LIMIT || "100", 10);
 const UNISWAP_BATCH_SIZE = parseInt(process.env.UNISWAP_BATCH_SIZE || "1000", 10)
 
+const WHITELIST_PAIR_ADDRESSES = (process.env.MONITORED_PAIR_ADDRESSES_WHITELIST || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean)
+
 // Not necessary, slightly speeds up loading initialization when we know tokens are bad
 // Estimate gas will ensure we aren't submitting bad bundles, but bad tokens waste time
 const blacklistTokens = [
@@ -77,6 +82,40 @@ export class UniswappyV2EthPair extends EthMarket {
   }
 
   static async getUniswapMarketsByToken(provider: providers.JsonRpcProvider, factoryAddresses: Array<string>): Promise<GroupedMarkets> {
+    if (WHITELIST_PAIR_ADDRESSES.length > 0) {
+      const whitelistedPairs = await Promise.all(
+        WHITELIST_PAIR_ADDRESSES.map(async (pairAddress) => {
+          const pair = new Contract(pairAddress, UNISWAP_PAIR_ABI, provider);
+          const token0: string = await pair.functions.token0().then((r: any) => r[0]);
+          const token1: string = await pair.functions.token1().then((r: any) => r[0]);
+          return new UniswappyV2EthPair(pairAddress, [token0, token1], "");
+        })
+      )
+
+      const marketsByTokenAll = _.chain(whitelistedPairs)
+        .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+        .value()
+
+      const allMarketPairs = _.chain(
+        _.pickBy(marketsByTokenAll, a => a.length > 1)
+      )
+        .values()
+        .flatten()
+        .value()
+
+      await UniswappyV2EthPair.updateReserves(provider, allMarketPairs);
+
+      const marketsByToken = _.chain(allMarketPairs)
+        .filter(pair => (pair.getBalance(WETH_ADDRESS).gt(ETHER)))
+        .groupBy(pair => pair.tokens[0] === WETH_ADDRESS ? pair.tokens[1] : pair.tokens[0])
+        .value()
+
+      return {
+        marketsByToken,
+        allMarketPairs
+      }
+    }
+
     const allPairs = await Promise.all(
       _.map(factoryAddresses, factoryAddress => UniswappyV2EthPair.getUniswappyMarkets(provider, factoryAddress))
     )
